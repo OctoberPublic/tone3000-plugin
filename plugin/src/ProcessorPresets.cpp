@@ -16,7 +16,8 @@
 const std::vector<juce::String>& TONE3000Processor::presetParameterIds() {
   // chainSolo* stays out on purpose: solo is monitoring state, not tone,
   // and a preset saved mid-audition must not load with a chain muted.
-  static const std::vector<juce::String> ids = {
+  static const std::vector<juce::String> ids = [] {
+    std::vector<juce::String> result = {
       "inputLevel",     "outputLevel",      "outputBalance",
       "toneBass",       "toneMid",          "toneTreble",
       "gateThreshold",  "gateEnabled",      "gateRelease",
@@ -32,6 +33,9 @@ const std::vector<juce::String>& TONE3000Processor::presetParameterIds() {
       "chainPanLeft",   "chainPanRight",    "chainPanLinked",
       "chainInvertLeft", "chainInvertRight",
   };
+    for (const auto& spec : OfflineEffects::specs) result.emplace_back(spec.id);
+    return result;
+  }();
   return ids;
 }
 

@@ -16,6 +16,10 @@ enable_language(C)
 juce_add_console_app(DspTests PRODUCT_NAME "DspTests")
 
 target_sources(DspTests PRIVATE
+    src/offline_editor_tests.cpp
+    ../plugin/src/OfflineEditor.cpp
+    src/offline_effects_tests.cpp
+    ../plugin/src/OfflineEffects.cpp
     src/auto_offset_tests.cpp
     src/branch_tests.cpp
     src/clipboard_tests.cpp
@@ -61,11 +65,6 @@ target_sources(DspTests PRIVATE
     ../plugin/src/ProcessorPresets.cpp
     ../plugin/src/ProcessorState.cpp
     ../plugin/src/Spread.cpp
-    # Processor.cpp's constructor calls StandaloneStateAutosave::install().
-    # Always the portable no-op stub here, never the .mm: the real observer
-    # is iOS-standalone-only and this suite never runs there (the stub is
-    # also what the plugin itself compiles to everywhere but iOS).
-    ../plugin/src/StandaloneStateAutosave.cpp
     ../plugin/src/PitchShift.cpp
     ../plugin/src/StereoOffset.cpp
     ../plugin/src/TunerDetector.cpp

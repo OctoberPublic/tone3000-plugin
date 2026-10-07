@@ -130,7 +130,7 @@ juce::File localModelsDir() {
 #if JUCE_MAC
   base = base.getChildFile("Application Support");
 #endif
-  return base.getChildFile("TONE3000").getChildFile("LocalModels");
+  return base.getChildFile("LocalRig").getChildFile("LocalModels");
 }
 
 // FNV-1a over the file bytes: stable across sessions and platforms without
@@ -298,6 +298,7 @@ juce::var stashLocalFileFromDisk(const juce::File& file, juce::String& error) {
 // "Couldn't read the file". juce::URL::createInputStream goes through the
 // bookmark and the scope, so it reads the same bytes the user actually picked.
 juce::var stashLocalFileFromUrl(const juce::URL& url, juce::String& error) {
+  if (!url.isLocalFile()) { error = "Only local NAM/IR files are supported"; return {}; }
   const juce::String filename = TONE3000Processor::localFileNameFromUrl(url);
   juce::MemoryOutputStream bytes;
   const auto in = url.createInputStream(
@@ -763,66 +764,10 @@ std::vector<uint8_t> TONE3000Processor::fetchModelFromUrl(const juce::String& mo
     return std::vector<uint8_t>(bytes, bytes + data.getSize());
   }
 
-  // The TONE3000 API requires a Bearer token on `model_url` requests;
-  // attach the latest token the UI handed us, if any. Anonymous fetches still
-  // work for legacy public URLs, so we degrade gracefully when no token is set.
-  // Chain the option builders since `InputStreamOptions` has no copy-assign.
-  const juce::String token = getAccessToken();
-  const juce::String extraHeaders =
-      token.isNotEmpty() ? juce::String("Authorization: Bearer ") + token
-                         : juce::String();
-  if (token.isEmpty()) {
-    // Happens when a restore-time load misses the embedded cache before the
-    // UI has pushed the auth token; the API rejects anonymous model fetches.
-    juce::Logger::writeToLog("[ModelLoader] Fetching model without auth token (may be rejected)");
-  }
-
-  auto options =
-      juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
-          .withConnectionTimeoutMs(30000)
-          .withExtraHeaders(extraHeaders);
-
-  std::unique_ptr<juce::InputStream> stream(url.createInputStream(options));
-
-  if (!stream) {
-    juce::Logger::writeToLog("[ModelLoader] Failed to open stream for model URL (network down or "
-                             "unreachable): " + modelUrl);
-    return {};
-  }
-
-  juce::MemoryBlock memoryBlock;
-  const size_t blockSize = 8192;
-  char buffer[blockSize];
-
-  // The connection timeout above only covers the connect; a stalled response
-  // body would otherwise pin a loader thread forever (an eternal "loading"
-  // block in the UI). Bound the whole download instead.
-  const juce::uint32 readDeadline = juce::Time::getMillisecondCounter() + 120000;
-
-  while (!stream->isExhausted()) {
-    if (juce::Time::getMillisecondCounter() > readDeadline) {
-      juce::Logger::writeToLog("[ModelLoader] Model download timed out: " + modelUrl);
-      return {};
-    }
-    int bytesRead = stream->read(buffer, blockSize);
-    if (bytesRead > 0) {
-      memoryBlock.append(buffer, bytesRead);
-    } else {
-      break;
-    }
-  }
-
-  if (memoryBlock.getSize() == 0) {
-    juce::Logger::writeToLog("[ModelLoader] Downloaded 0 bytes from model URL: " + modelUrl);
-    return {};
-  }
-
-  DBG("Successfully downloaded " << memoryBlock.getSize() << " bytes");
-
-  std::vector<uint8_t> result(memoryBlock.getSize());
-  std::memcpy(result.data(), memoryBlock.getData(), memoryBlock.getSize());
-
-  return result;
+  // Offline fork: persisted remote URLs are never fetched. Embedded model bytes
+  // still restore normally; otherwise the user must load a local NAM/IR file.
+  juce::Logger::writeToLog("[ModelLoader] Remote model unavailable in offline edition");
+  return {};
 }
 
 

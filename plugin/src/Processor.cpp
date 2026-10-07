@@ -1,22 +1,14 @@
 #include "Processor.h"
 #if !HEADLESS
-#include "NativeEditor.h"
+#include "OfflineEditor.h"
 #endif
-#include "StandaloneStateAutosave.h"
+
 #include <cmath>
 #include <mutex>
 #include <optional>
 #include <random>
 #include <cstring>
 #include <tuple>
-
-// StandalonePluginHolder: used to inspect the audio device's active channels
-// so we can detect a mono input or output (see standaloneMonoInput /
-// standaloneMonoOutput).
-#if !HEADLESS && JucePlugin_Build_Standalone && ! JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP
-#include <juce_audio_utils/juce_audio_utils.h>
-#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
-#endif
 
 // ##############
 // MAIN PROCESSOR
@@ -35,6 +27,7 @@ TONE3000Processor::TONE3000Processor()
       // waiter (releaseChainEditFadeWhenLoadsSettle) never serializes the
       // very loads it is waiting on.
       loadingThreadPool(3) {
+  offlineEffects.bind(parameters);
   // Attach the file logger first thing: state restore (and the background
   // model loads it queues) runs before prepareToPlay, and its diagnostics
   // used to vanish because the logger didn't exist yet.
@@ -111,7 +104,7 @@ TONE3000Processor::TONE3000Processor()
   // iOS standalone only: nothing else on that platform ever saves the plugin
   // state, so the signal chain would not survive a relaunch (see
   // StandaloneStateAutosave.h). A no-op everywhere else.
-  StandaloneStateAutosave::install();
+
 
   DBG("TONE3000Processor constructed");
 }
@@ -364,6 +357,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TONE3000Processor::createPar
       static_cast<int>(PitchShift::kDefaultWindow),
       juce::AudioParameterChoiceAttributes().withAutomatable(false)));
 
+  OfflineEffects::addParameters(layout);
   return layout;
 }
 
@@ -533,7 +527,7 @@ TONE3000Processor::~TONE3000Processor() {
 // JUCE SETTINGS
 // #############
 const juce::String TONE3000Processor::getName() const {
-  return "TONE3000";
+  return "Local Rig";
 }
 
 bool TONE3000Processor::acceptsMidi() const {
@@ -559,7 +553,7 @@ double TONE3000Processor::getTailLengthSeconds() const {
   //    reference NAM plugin reports the same allowance for VST3 tail checks.
   const double irTailSeconds = irTailBaseSamples.load() / kChainBaseSampleRate;
   const double dcBlockerTailSeconds = 10.0 / 5.0;
-  return std::max(irTailSeconds, dcBlockerTailSeconds);
+  return std::max(irTailSeconds, dcBlockerTailSeconds) + offlineEffects.tailSeconds();
 }
 
 // The host program API (getNumPrograms and friends) lives in
@@ -848,16 +842,7 @@ void TONE3000Processor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   // configuration.
   standaloneMonoInput.store(false);
   standaloneMonoOutput.store(false);
-#if !HEADLESS && JucePlugin_Build_Standalone && ! JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP
-  if (wrapperType == wrapperType_Standalone) {
-    if (auto* holder = juce::StandalonePluginHolder::getInstance())
-      if (auto* device = holder->deviceManager.getCurrentAudioDevice()) {
-        standaloneMonoInput.store(device->getActiveInputChannels().countNumberOfSetBits() == 1);
-        standaloneMonoOutput.store(device->getActiveOutputChannels().countNumberOfSetBits() ==
-                                   1);
-      }
-  }
-#endif
+
 
   updateStereoIoDetection();
 
@@ -881,6 +866,7 @@ void TONE3000Processor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   // The oversampler is minimum-phase (zero reported latency), so the boundary
   // and a powered pitch shifter are the only latency sources at any factor.
   pitchShift.prepare(sampleRate, juce::jmax(1, samplesPerBlock));
+  offlineEffects.prepare(sampleRate, samplesPerBlock);
   updateLatency();
   DBG("Chain boundary " << (boundaryNeeded ? "engaged" : "bypassed")
       << " (latency: " << chainBoundaryLatency << " samples)");
@@ -1020,6 +1006,7 @@ void TONE3000Processor::releaseResources() {
   trebleFilter.reset();
   dcBlocker.reset();
   inputGate.reset();
+  offlineEffects.reset();
 }
 
 bool TONE3000Processor::isBusesLayoutSupported(const BusesLayout& layouts) const {
@@ -1851,6 +1838,7 @@ void TONE3000Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
     inputGate.process(buffer);
   }
   gateWasEnabled = cacheGateEnabled;
+  offlineEffects.processPre(buffer);
 
   // Pitch shift (PitchShift.h): shifts the instrument before the chain, so
   // the amp sees a down-tuned (or whammy-bent) guitar. After the gate so it
@@ -2028,6 +2016,7 @@ void TONE3000Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
   // EQ section (global 3-band tone stack), post-chain.
   // ##########
   processToneStack(buffer);
+  offlineEffects.processPost(buffer);
 
   // ##########
   // Auto-align probe mute: fades the output before the probe starts, holds
@@ -2077,7 +2066,7 @@ bool TONE3000Processor::hasEditor() const {
 // ##############
 juce::AudioProcessorEditor* TONE3000Processor::createEditor() {
 #if !HEADLESS
-  return new t3k::ui::NativeEditor(*this);
+  return new OfflineEditor(*this);
 #else
   return nullptr;
 #endif
@@ -2343,6 +2332,6 @@ juce::var TONE3000Processor::pollAutoOffset() {
 // UI's copy/reveal actions always target the same file.
 juce::File TONE3000Processor::getLogFile() {
   return juce::FileLogger::getSystemLogFileFolder()
-      .getChildFile("TONE3000")
+      .getChildFile("LocalRig")
       .getChildFile("TONE3000.log");
 }

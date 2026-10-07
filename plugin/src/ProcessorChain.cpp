@@ -1682,14 +1682,3 @@ void TONE3000Processor::disableAllBlockSpectrums() {
     for (auto& block : chain)
       block->spectrum.setEnabled(false);
 }
-
-void TONE3000Processor::setAccessToken(const juce::String& token) {
-  juce::ScopedLock lock(accessTokenMutex);
-  accessToken = token;
-  DBG("TONE3000 access token updated (" << token.length() << " chars)");
-}
-
-juce::String TONE3000Processor::getAccessToken() const {
-  juce::ScopedLock lock(accessTokenMutex);
-  return accessToken;
-}

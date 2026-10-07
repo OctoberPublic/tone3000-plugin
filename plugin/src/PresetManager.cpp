@@ -18,7 +18,7 @@ juce::File presetsRootDir() {
 #if JUCE_MAC
   base = base.getChildFile("Application Support");
 #endif
-  return base.getChildFile("TONE3000").getChildFile("Presets");
+  return base.getChildFile("LocalRig").getChildFile("Presets");
 }
 
 juce::String stripPrefix(const juce::String& id, const char* prefix) {
@@ -67,7 +67,7 @@ juce::File PresetManager::defaultSystemFactoryDir() {
 #elif JUCE_WINDOWS
   // ProgramData; matches the Inno Setup {commonappdata} destination.
   return juce::File::getSpecialLocation(juce::File::commonApplicationDataDirectory)
-      .getChildFile("TONE3000")
+      .getChildFile("LocalRig")
       .getChildFile("Presets")
       .getChildFile("Factory");
 #elif JUCE_LINUX

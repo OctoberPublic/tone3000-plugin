@@ -25,6 +25,7 @@
 #include "MidiMapper.h"
 #include "NoiseGate.h"
 #include "PitchShift.h"
+#include "OfflineEffects.h"
 #include "Spread.h"
 #include "StereoOffset.h"
 #include "PresetManager.h"
@@ -216,12 +217,6 @@ public:
   // (empty clipboard, or the right lane while mono).
   std::string pasteChainBlock(const juce::String& side, int index);
 
-  // TONE3000 OAuth access token. Updated by the UI after the Select flow and
-  // again on every refresh. `fetchModelFromUrl` attaches it as a Bearer header
-  // because the new TONE3000 model_url endpoints reject anonymous requests.
-  void setAccessToken(const juce::String& token);
-  juce::String getAccessToken() const;
-  
   // Background loading (called by thread pool jobs)
   void loadToneInBackground(const std::string& blockId, int firstModelId,
                             const juce::String& modelUrl, const juce::String& modelName,
@@ -1049,11 +1044,6 @@ private:
     return false;
   }
 
-  // TONE3000 OAuth access token (Bearer). Read by `fetchModelFromUrl` from any
-  // thread; written by the UI thread via `setAccessToken`.
-  juce::String accessToken;
-  mutable juce::CriticalSection accessTokenMutex;
-  
   // Thread pool for background model loading
   juce::ThreadPool loadingThreadPool;
 
@@ -1075,6 +1065,7 @@ private:
   // adds is reported from the message thread (see updateLatency), never
   // from processBlock.
   PitchShift pitchShift;
+  OfflineEffects offlineEffects;
 
   // Raw APVTS parameter atomics, resolved once in the constructor. The audio
   // thread reads these every block; getRawParameterValue is a string-keyed

@@ -1,23 +1,13 @@
 #!/usr/bin/env bash
-# Build and run the DSP test suite (test/src/dsp_tests.cpp) locally.
-#
-#   ./script/test-dsp.sh                       # everything
-#   ./script/test-dsp.sh 'ChainOversampler*'   # gtest filter
-#
-# Uses the existing build/ directory (configures a Release build if missing).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-
 if [ ! -f build/CMakeCache.txt ]; then
-  cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+  cmake --preset linux-dev
 fi
-
-cmake --build build --target DspTests
-
-BIN=$(find build/test -type f \( -name DspTests -o -name DspTests.exe \) | head -1)
-if [ -z "$BIN" ]; then
-  echo "DspTests binary not found under build/test" >&2
-  exit 1
+cmake --build build --target DspTests --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-2}"
+# The suite now also exercises the offline editor. A virtual X display is
+# required on Linux even though the test runner itself is a console binary.
+if [[ $(uname -s) == Linux ]]; then
+  exec xvfb-run -a build/test/DspTests_artefacts/Release/DspTests ${1:+--gtest_filter="$1"}
 fi
-
-exec "$BIN" ${1:+--gtest_filter="$1"}
+exec build/test/DspTests_artefacts/Release/DspTests ${1:+--gtest_filter="$1"}

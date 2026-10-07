@@ -24,3 +24,6 @@ TONE3000-CERTS/
 notes/
 build-ui/
 build-ui-release/
+build-windows/
+dist/
+Local-Rig-Windows-x64.zip
